@@ -36,9 +36,9 @@ A FastAPI application designed to scrape and track flight information from fligh
    uvicorn flight_scrapper:app --reload
 
 **Usage**
-Once the server is running, you can query flight data using:
-```bash
-curl "http://localhost:8000/flights?airline_code=AA&airline_number=123&departure_date=2023-10-01"
+    Once the server is running, you can query flight data using:
+    ```bash
+    curl "http://localhost:8000/flights?airline_code=AA&airline_number=123&departure_date=2023-10-01"
 
 **API Endpoints**
     ** - GET /flights**
