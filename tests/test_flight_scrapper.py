@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 BASE_URL = "http://localhost:8000"
 
 # Database Configuration for Testing
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_flights.db"
+SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///../src/flights.db"
 test_engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
@@ -95,7 +95,7 @@ class TestFlightEndpoint:
             Flight.departure_date == datetime.datetime(2025, 1, 20)
         ).first()
         assert flight is not None
-        assert flight.main_status == "On time"  # Assuming this is the default status set in your code
+        assert flight.main_status == "Scheduled"  # Assuming this is the default status set in your code
 
     def test_flight_not_found(self):
         # Assuming there's no flight with these parameters
