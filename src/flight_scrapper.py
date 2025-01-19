@@ -71,7 +71,7 @@ class FlightQuery(BaseModel):
 
     @validator('airline_code')
     def airline_code_must_be_iata(cls, v):
-        if not (v.isalpha() and len(v) == 2):
+        if not (v.isalnum() and len(v) == 2):
             raise ValueError("Airline code must be 2 alphabetic characters")
         return v.upper()
 
@@ -122,8 +122,8 @@ async def get_flight(
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # Check if the flight status container is present
-        #ticket_container = soup.find('div', class_='ticket__TicketContainer-sc-1rrbl5o-0 crILdr')
-        ticket_container = soup.find('div', class_='layout-row__RowInner-sc-1uoco8s-1 hkmBIC')
+        ticket_container = soup.find('div', class_='ticket__TicketContainer-sc-1rrbl5o-0 crILdr')
+        #ticket_container = soup.find('div', class_='layout-row__RowInner-sc-1uoco8s-1 hkmBIC')
         if ticket_container:
             # Find main status
             if (ticket_container.find('div', class_='text-helper__TextHelper-sc-8bko4a-0 iicbYn')):
@@ -205,8 +205,7 @@ async def get_flight(
                 "to_airport_city": to_airport_city
             }
         else:
-            # Return without URL in the response
-            return {"detail": "Flight information not available"}
+            raise HTTPException(status_code=404, detail="Flight information not available")
 
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))

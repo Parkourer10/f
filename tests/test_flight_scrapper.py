@@ -1,82 +1,108 @@
+import sys
+import os
 import pytest
-from fastapi.testclient import TestClient
+import requests
+import datetime
+from src.flight_scrapper import Flight, Base  # If you need to interact with the database or the model directly
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from flight_scrapper import app, Flight, Base
-import datetime
+from sqlalchemy.schema import DropTable
+from sqlalchemy.exc import OperationalError
 
-# SQLAlchemy test database URL
+# Add the parent directory to sys.path if needed
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# URL where the FastAPI server is running
+BASE_URL = "http://localhost:8000"
+
+# Database Configuration for Testing
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_flights.db"
+test_engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-# Create test database engine
-engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Fixtures for database and test client
+# Fixtures for database
 @pytest.fixture(scope="function")
 def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    # Drop and recreate the database for each test to ensure a clean slate
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-@pytest.fixture(scope="function")
-def client():
-    return TestClient(app)
-
 # Helper function to create a flight in the database for testing
-def create_test_flight(db, airline_code="AA", airline_number="123", departure_date=datetime.datetime(2023, 10, 1), status="On Time"):
-    flight = Flight(airline_code=airline_code, airline_number=airline_number, departure_date=departure_date, status=status)
+def create_test_flight(db, airline_code="B6", airline_number="311", departure_date=datetime.datetime(2025, 1, 20), request_datetime=datetime.datetime.now(), main_status="Scheduled", sub_status="On time", flight_name="B6 311", airline_name="JetBlue", from_airport_code="BOS", from_airport_city="Boston", to_airport_code="ORD", to_airport_city="Chicago"):
+    flight = Flight(
+        airline_code=airline_code, 
+        airline_number=airline_number, 
+        departure_date=departure_date, 
+        request_datetime=request_datetime,
+        main_status=main_status, 
+        sub_status=sub_status, 
+        flight_name=flight_name, 
+        airline_name=airline_name, 
+        from_airport_code=from_airport_code,
+        from_airport_city=from_airport_city,
+        to_airport_code=to_airport_code,
+        to_airport_city=to_airport_city
+    )
     db.add(flight)
     db.commit()
     db.refresh(flight)
 
 # Test suite for endpoint functionality
 class TestFlightEndpoint:
-    def test_get_flight_valid_data(self, client, db):
+    def test_get_flight_valid_data(self, db):
         create_test_flight(db)
-        response = client.get("/flights?airline_code=AA&airline_number=123&departure_date=2023-10-01")
+        response = requests.get(f"{BASE_URL}/flights?airline_code=B6&airline_number=311&departure_date=20-Jan-2025")
         assert response.status_code == 200
         data = response.json()
-        assert "airline_code" in data
-        assert "airline_number" in data
-        assert "departure_date" in data
-        assert "status" in data
+        assert data["airline_code"] == "B6"
+        assert data["airline_number"] == "311"
+        assert data["departure_date"] == "20-Jan-2025"
+        assert data["main_status"] == "Scheduled"
+        assert data["sub_status"] == "On time"
+        assert data["flight_name"] == "B6 311"
+        assert data["airline_name"] == "JetBlue"
+        assert data["from_airport_code"] == "BOS"
+        assert data["from_airport_city"] == "Boston"
+        assert data["to_airport_code"] == "ORD"
+        assert data["to_airport_city"] == "Chicago"
 
-    def test_get_flight_invalid_airline_code(self, client, db):
-        response = client.get("/flights?airline_code=AAA&airline_number=123&departure_date=2023-10-01")
+    def test_get_flight_invalid_airline_code(self):
+        response = requests.get(f"{BASE_URL}/flights?airline_code=AAA&airline_number=123&departure_date=01-Oct-2023")
         assert response.status_code == 400
         assert "Airline code must be 2 alphabetic characters" in response.json()["detail"]
 
-    def test_get_flight_invalid_airline_number(self, client, db):
-        response = client.get("/flights?airline_code=AA&airline_number=12A&departure_date=2023-10-01")
+    def test_get_flight_invalid_airline_number(self):
+        response = requests.get(f"{BASE_URL}/flights?airline_code=AA&airline_number=12A&departure_date=01-Oct-2023")
         assert response.status_code == 400
         assert "Airline number must be numeric" in response.json()["detail"]
 
-    def test_get_flight_invalid_departure_date(self, client, db):
-        response = client.get("/flights?airline_code=AA&airline_number=123&departure_date=2023/10/01")
+    def test_get_flight_invalid_departure_date(self):
+        response = requests.get(f"{BASE_URL}/flights?airline_code=AA&airline_number=123&departure_date=2023/10/01")
         assert response.status_code == 400
-        assert "Departure date must be in the format 'YYYY-MM-DD'" in response.json()["detail"]
+        assert "Departure date must be in the format 'DD-MMM-YYYY'" in response.json()["detail"]
 
-    def test_flight_saved_in_db(self, client, db):
-        client.get("/flights?airline_code=AA&airline_number=123&departure_date=2023-10-01")
+    def test_flight_saved_in_db(self, db):
+        # Assuming the flight_scrapper app writes to the database when queried
+        requests.get(f"{BASE_URL}/flights?airline_code=B6&airline_number=311&departure_date=20-Jan-2025")
         flight = db.query(Flight).filter(
-            Flight.airline_code == "AA",
-            Flight.airline_number == "123",
-            Flight.departure_date == datetime.datetime(2023, 10, 1)
+            Flight.airline_code == "B6",
+            Flight.airline_number == "311",
+            Flight.departure_date == datetime.datetime(2025, 1, 20)
         ).first()
         assert flight is not None
-        assert flight.status == "On Time"  # Assuming this is the default status set in your code
+        assert flight.main_status == "On time"  # Assuming this is the default status set in your code
 
-    def test_flight_not_found(self, client, db):
+    def test_flight_not_found(self):
         # Assuming there's no flight with these parameters
-        response = client.get("/flights?airline_code=ZZ&airline_number=999&departure_date=2023-10-01")
+        response = requests.get(f"{BASE_URL}/flights?airline_code=ZZ&airline_number=999&departure_date=01-Oct-2023")
         assert response.status_code == 404
-        assert "Flight information not found" in response.json()["detail"]
+        assert "Flight information not available" in response.json()["detail"]
 
 # Run the tests
 if __name__ == "__main__":
-    pytest.main(["-v", "test_flight_scrapper.py"])  # Update the filename here
+    pytest.main(["-v", "test_flight_scrapper.py"])
